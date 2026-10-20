@@ -1,6 +1,6 @@
 ﻿// Lab 6
-// Student name:
-// Student number:
+// Student name: Constantine Haralabopoulos
+// Student number: 47989504
 
 using System;
 using System.Collections.Generic;
@@ -23,8 +23,41 @@ Dictionary<string, Dictionary<string, double>> scaffold = new()
 //Compare finite distances using a small tolerance, and check unreachable
 //vertices with double.IsPositiveInfinity.
 //TODO
-//
-//
+static void Check(string name, double actual, double expected)
+{
+    bool pass = double.IsPositiveInfinity(expected)
+        ? double.IsPositiveInfinity(actual)
+        : Math.Abs(actual - expected) < 1e-9;
+    Console.WriteLine($"{(pass ? "PASS" : "FAIL")}: {name} (expected {expected}, got {actual})");
+}
+
+// Test 1: distances from A on the scaffold graph.
+// Checks that indirect paths beat direct edges: A->B->C = 3 is cheaper than A->C = 5.
+var fromA = GraphLibrary.ShortestDistancesFrom(scaffold, "A");
+Check("A->A", fromA["A"], 0.0);
+Check("A->B", fromA["B"], 2.0);
+Check("A->C", fromA["C"], 3.0);
+Check("A->D", fromA["D"], 4.5);
+Check("A->E", fromA["E"], 7.5);
+Check("A->F (unreachable)", fromA["F"], double.PositiveInfinity);
+Console.WriteLine($"{(fromA.Count == 6 ? "PASS" : "FAIL")}: result has one entry per vertex (count {fromA.Count})");
+
+// Test 2: an isolated source. Everything except F itself should be unreachable.
+var fromF = GraphLibrary.ShortestDistancesFrom(scaffold, "F");
+Check("F->F", fromF["F"], 0.0);
+foreach (string v in new[] { "A", "B", "C", "D", "E" })
+    Check($"F->{v} (unreachable)", fromF[v], double.PositiveInfinity);
+
+// Test 3: a source that isn't in the graph must throw ArgumentException.
+try
+{
+    GraphLibrary.ShortestDistancesFrom(scaffold, "Z");
+    Console.WriteLine("FAIL: missing source did not throw");
+}
+catch (ArgumentException)
+{
+    Console.WriteLine("PASS: missing source threw ArgumentException");
+}
 //end Testing code
 
 //Do not change the program skeleton: keep the class name, method names,
@@ -68,13 +101,42 @@ public static class GraphLibrary
     /// priorities to stored distances instead.
     /// </remarks>
     public static Dictionary<string, double> ShortestDistancesFrom(
-        IReadOnlyDictionary<string, Dictionary<string, double>> graph,
-        string source)
+    IReadOnlyDictionary<string, Dictionary<string, double>> graph,
+    string source)
+{
+    if (!graph.ContainsKey(source))
+        throw new ArgumentException("Source is not a vertex in the graph.", nameof(source));
+
+    // Every vertex starts at infinity; the source starts at 0
+    var distances = new Dictionary<string, double>();
+    foreach (string v in graph.Keys)
+        distances[v] = double.PositiveInfinity;
+    distances[source] = 0.0;
+
+    var work = new PriorityQueue<string, double>();
+    work.Enqueue(source, 0.0);
+
+    var finalized = new HashSet<string>();
+
+    while (work.TryDequeue(out string u, out double d))
     {
-        //TODO
-        throw new NotImplementedException();
+        if (finalized.Contains(u)) continue;   // stale entry: u was already finalized
+        finalized.Add(u);
+
+        foreach (var (v, weight) in graph[u])
+        {
+            if (finalized.Contains(v)) continue;
+            double newDist = distances[u] + weight;
+            if (newDist < distances[v])
+            {
+                distances[v] = newDist;
+                work.Enqueue(v, newDist);
+            }
+        }
     }
 
+    return distances;
+}
 
     // ---------------------------------------------------------------------
     // Optional challenge (Section 7). Leave the NotImplementedException in
